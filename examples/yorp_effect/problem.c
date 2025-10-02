@@ -2,7 +2,7 @@
  * YORP Effect on a Single Asteroid
  * 
  * This example shows the effect of the YORP radiation force on a single asteroid rotating near break-up speed,
- * in orbit around a white dwarf. The fragmentation process is defined in a custom heartbeat function and produces
+ * in orbit around a red giant. The fragmentation process is defined in a custom heartbeat function and produces
  * a binary asteroid with a few smaller fragments called "shards". Since we are using test particles (where the mass
  * is set to 0), this is a simplified model and does not include binary interactions between the asteroid fragments. 
  */
@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
     struct reb_simulation* sim = reb_simulation_create(); // create simulation
 
     sim->G = 4*M_PI*M_PI;  // use units of AU, yr and solar masses
-    sim->dt = .0005;         // timestep for simulation in yrs
+    sim->dt = 1.;         // timestep for simulation in yrs
     sim->integrator = REB_INTEGRATOR_WHFAST; // integrator for sim
     sim->heartbeat = heartbeat; // function pointer for heartbeat
 
@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
 
     // orbital elements of the asteroid to add
     double m = 0;
-    double a = .005;
+    double a = 5.;
     double e = 0;
     double inc = 0;
     double Omega = 0;
@@ -58,8 +58,8 @@ int main(int argc, char* argv[]) {
     double c_body = 1./10./10.;
     double phi = 1.e17/au_conv/msun_conv*yr_conv*yr_conv;
     double density = (2000.0*au_conv*au_conv*au_conv)/msun_conv;
-    double lstar = 1e-3; // luminosity MUST be in units of solar luminosity
-    double rotation_frequency = 0.0081991*yr_conv;
+    double lstar = 1000.; // luminosity MUST be in units of solar luminosity
+    double rotation_frequency = 0.008*yr_conv;
     double sigma = 1.e3/msun_conv*au_conv*yr_conv*yr_conv;
 
     // obliquity parameters
@@ -82,7 +82,7 @@ int main(int argc, char* argv[]) {
     rebx_add_operator(rebx, yorp);
 
     // integrate the simulation over tmax time
-    double tmax = 10.0;
+    double tmax = 1.0E7;
     reb_simulation_integrate(sim, tmax);
 
     // print final rotation frequency and radius for each asteroid
@@ -93,7 +93,7 @@ int main(int argc, char* argv[]) {
         double* final_eps = rebx_get_param(sim->extras, p->ap, "yorp_obliquity"); // final obliquity
         *final_eps = 180.0*(*final_eps)/M_PI;
 
-        printf("ASTEROID %d FINAL ROTATION FREQUENCY: %1.10f rad/s\n", i, *final_w);
+        printf("\nASTEROID %d FINAL ROTATION FREQUENCY: %1.10f rad/s\n", i, *final_w);
         printf("ASTEROID %d FINAL OBLIQUITY: %1.2f deg\n", i, *final_eps);
         printf("ASTEROID %d FINAL RADIUS: %1.5f m\n", i, (p->r)*au_conv);
     }
