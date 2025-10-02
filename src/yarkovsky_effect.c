@@ -5,7 +5,7 @@
  *
  * @section     LICENSE
  * Copyright (c) 2015 Dan Tamayo, Hanno Rein
- *TEST
+ *
  * This file is part of reboundx.
  *
  * reboundx is free software: you can redistribute it and/or modify
