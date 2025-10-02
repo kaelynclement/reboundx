@@ -144,6 +144,15 @@ void rebx_register_default_params(struct rebx_extras* rebx){
     rebx_register_param(rebx, "lt_p_haty", REBX_TYPE_DOUBLE);
     rebx_register_param(rebx, "lt_p_hatz", REBX_TYPE_DOUBLE);
     rebx_register_param(rebx, "lt_c", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "yorp_c_body", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "yorp_solar_radiation_constant", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "yorp_body_density", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "yorp_lstar", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "yorp_rotation_frequency", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "yorp_tensile_strength", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "yorp_obliquity", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "yorp_alpha", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "yorp_beta", REBX_TYPE_DOUBLE);
 }
 
 void rebx_register_param(struct rebx_extras* const rebx, const char* name, enum rebx_param_type type){
@@ -440,6 +449,10 @@ struct rebx_operator* rebx_load_operator(struct rebx_extras* const rebx, const c
     else if (strcmp(name, "track_min_distance") == 0){
         operator->step_function = rebx_track_min_distance;
         operator->operator_type = REBX_OPERATOR_RECORDER;
+    }
+    else if (strcmp(name, "yorp_effect") == 0){
+        operator->step_function = rebx_yorp_effect;
+        operator->operator_type = REBX_OPERATOR_UPDATER;
     }
     else{
         char str[300];
