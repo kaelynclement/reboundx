@@ -55,6 +55,7 @@ int main(int argc, char* argv[]) {
     double yr_conv = 31557600.0;
 
     // parameter values for the asteroid and the effect
+    double radius = 100./au_conv;
     double c_body = 1./10./10.;
     double phi = 1.e17/au_conv/msun_conv*yr_conv*yr_conv;
     double density = (2000.0*au_conv*au_conv*au_conv)/msun_conv;
@@ -72,7 +73,7 @@ int main(int argc, char* argv[]) {
     rebx_set_param_double(rebx, &yorp->ap, "yorp_lstar", lstar);
     rebx_set_param_double(rebx, &yorp->ap, "yorp_solar_radiation_constant", phi);
     rebx_set_param_double(rebx, &sim->particles[1].ap, "yorp_body_density", density);
-    particles[1].r = 100./au_conv;
+    particles[1].r = radius;
     rebx_set_param_double(rebx, &sim->particles[1].ap, "yorp_rotation_frequency", rotation_frequency);
     rebx_set_param_double(rebx, &sim->particles[1].ap, "yorp_tensile_strength", sigma);
     rebx_set_param_double(rebx, &sim->particles[1].ap, "yorp_obliquity", obliquity);
