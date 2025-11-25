@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
     struct reb_simulation* sim = reb_simulation_create(); // create simulation
 
     sim->G = 4*M_PI*M_PI;  // use units of AU, yr and solar masses
-    sim->dt = 1.;         // timestep for simulation in yrs
+    sim->dt = 0.01;         // timestep for simulation in yrs
     sim->integrator = REB_INTEGRATOR_WHFAST; // integrator for sim
     sim->heartbeat = heartbeat; // function pointer for heartbeat
 
@@ -60,11 +60,11 @@ int main(int argc, char* argv[]) {
     double phi = 1.e17/au_conv/msun_conv*yr_conv*yr_conv;
     double density = (2000.0*au_conv*au_conv*au_conv)/msun_conv;
     double lstar = 1000.; // luminosity MUST be in units of solar luminosity
-    double rotation_frequency = 0.008*yr_conv;
+    double rotation_frequency = 0.*yr_conv;
     double sigma = 1.e3/msun_conv*au_conv*yr_conv*yr_conv;
 
     // obliquity parameters
-    double obliquity = M_PI/6.0;
+    double obliquity = M_PI/6.;
     double alpha = 2.0/3.0;
     double beta = 1.0/3.0;
 
@@ -83,7 +83,7 @@ int main(int argc, char* argv[]) {
     rebx_add_operator(rebx, yorp);
 
     // integrate the simulation over tmax time
-    double tmax = 1.0E7;
+    double tmax = 1.E3;
     reb_simulation_integrate(sim, tmax);
 
     // print final rotation frequency and radius for each asteroid
@@ -121,6 +121,16 @@ void heartbeat(struct reb_simulation* sim) {
         const double* sigma = rebx_get_param(sim->extras, p->ap, "yorp_tensile_strength");
         double* rotation_frequency = rebx_get_param(sim->extras, p->ap, "yorp_rotation_frequency");
         double r = p->r;
+
+        // DEBUGGING
+        if ((0.0 < sim->t && sim->t < 0.1)||(26.25 < sim->t && sim->t < 26.3)){
+            const double* omega1 = rebx_get_param(sim->extras, p->ap, "yorp_rotation_frequency");
+            const double* obliq1 = rebx_get_param(sim->extras, p->ap, "yorp_obliquity");
+
+            printf("\nParams at t = %1.15f yr:\n", sim->t);
+            printf("\tomega = %1.10f rad/yr\n", *omega1);
+            printf("\tobliquity = %1.10f rad\n", *obliq1);
+        }
 
         // Eq. 2 in Veras and Scheeres (2020). Actually the failure spin rate squared.
         double failure_spin_rate = (4.*M_PI*G*(*density))/3. + (2.*(*sigma))/((*density)*r*r)*(2./3.);
