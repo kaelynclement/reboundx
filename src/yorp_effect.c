@@ -30,13 +30,14 @@
  * ======================= ===============================================
  * Authors                 Kaelyn Clement
  * Implementation Paper    Clement et al., in prep.
- * Based on                `Veras and Scheeres., 2020 <https://ui.adsabs.harvard.edu/abs/2020MNRAS.492.2437V/abstract>`_.
+ * Based on                `Veras & Scheeres 2020 <https://ui.adsabs.harvard.edu/abs/2020MNRAS.492.2437V/abstract>`_, `Golubov & Scheeres 2019 <https://ui.adsabs.harvard.edu/abs/2019AJ....157..105G/abstract>`_.
  * Python Example          `YORPEffect.ipynb <https://github.com/dtamayo/reboundx/blob/master/ipython_examples/YORP_Effect.ipynb>`_.
  * ======================= ===============================================
  *
  * This calculates the change in rotation frequency (spin-up) of a body due to the YORP effect.
  * If the tensile strength is set, the user can also define a heartbeat function within problem.c
- * to determine how to handle particle fragmentation.
+ * to determine how to handle particle fragmentation. If obliquity is set, then both the axial and
+ * obliquity YORP effects are included.
  * 
  * **Effect Parameters**
  *
@@ -52,15 +53,16 @@
  * =============================== =========== ==================================================================
  * Field (C type)                  Required    Description
  * =============================== =========== ==================================================================
- * particles[i].r (float)          Yes         Physical radius of a body.
- * yorp_body_density (float)       Yes         Density of an object.
- * yorp_rotation_frequency (float) Yes         Rotation frequency of a spinning object.
+ * yorp_rotation_frequency (float) Yes         Rotation frequency of the body.
+ * yorp_c_body (float)             Yes         YORP coefficient (asymmetry) of the body from Veras and Scheeres (2020).
+ * yorp_body_density (float)       Yes         Density of the body.
+ * particles[i].r (float)          Yes         Physical radius of the body.
  * o.a (float)                     Yes         Semimajor axis of body orbit.
  * o.e (float)                     Yes         Eccentricity of body orbit.
- * yorp_tensile_strength (float)   No          Tensile strength of a body.
- * yorp_obliquity (float)          No          Obliquity of an object in radians.
- * yorp_alpha (float)              No          Constant relating the z and epsilon YORP coefficients.
- * yorp_beta (float)               No          Fitting coefficient for obliquity-dependent YORP.
+ * yorp_tensile_strength (float)   No          Tensile strength of a body (required for fragmentation).
+ * yorp_obliquity (float)          No          Obliquity of an object in radians (required for obliquity-dependent YORP).
+ * yorp_alpha (float)              No          Constant relating the axial and obliquity YORP coefficients from Golubov & Scheeres (2019) (required for obliquity-dependent YORP).
+ * yorp_beta (float)               No          Fitting coefficient from Golubov & Scheeres (2019) (required for obliquity-dependent YORP).
  * =============================== =========== ==================================================================
  *
  */
@@ -87,40 +89,44 @@ void rebx_yorp_effect(struct reb_simulation* const sim, struct rebx_operator* co
         const double a = o.a; // semi-major axis
         const double e = o.e; // eccentricity
 
-        // particle radius needed to calculate yorp effect
-        const double r = p->r;
-
         // yorp effect parameters needed for calculation
-        const double* c_body = rebx_get_param(sim->extras, p->ap, "yorp_c_body");
         const double* phi = rebx_get_param(sim->extras, operator->ap, "yorp_solar_radiation_constant");
-        const double* density = rebx_get_param(sim->extras, p->ap, "yorp_body_density");
         const double* lstar = rebx_get_param(sim->extras, operator->ap, "yorp_lstar");
+        
+        // asteroid parameters needed for calculation
         double* rotation_frequency = rebx_get_param(sim->extras, p->ap, "yorp_rotation_frequency");
+        const double* c_body = rebx_get_param(sim->extras, p->ap, "yorp_c_body");
+        const double* density = rebx_get_param(sim->extras, p->ap, "yorp_body_density");
+        const double r = p->r;
 
         // parameters needed to include obliquity effects
         double* obliquity = rebx_get_param(sim->extras, p->ap, "yorp_obliquity");
         const double* alpha = rebx_get_param(sim->extras, p->ap, "yorp_alpha");
         const double* beta = rebx_get_param(sim->extras, p->ap, "yorp_beta");
         
-        // check all parameters are defined before calculating yorp effect
+        // check all necessary parameters are defined before calculating yorp effect
         if (c_body != NULL && phi != NULL && density != NULL && lstar != NULL && rotation_frequency != NULL){
 
+            // from Equation 1 in Veras & Scheeres (2020)
             const double frac = ((3.*(*c_body)*(*phi))/(4.*M_PI*(*density)*r*r*a*a*sqrt(1.-e*e)))*(*lstar);
 
-            // check parameters needed to include the obliquity effects
+            // check parameters needed to include obliquity effects
             if (obliquity != NULL && alpha != NULL && beta != NULL){
+
+                // derived from Equations 1-4 in Golubov & Scheeres (2019)
                 *rotation_frequency += frac*(cos(2.*(*obliquity))+*beta)*dt;
                 *obliquity += (*alpha/(*rotation_frequency))*frac*sin(2.*(*obliquity))*dt;
 
                 // keep obliquity between 0 and pi
                 if (*obliquity > M_PI){
-                    *obliquity -= M_PI;
+                    *obliquity = fmod(*obliquity, M_PI);
                 }
                 if (*obliquity < 0.0){
-                    *obliquity += M_PI;
+                    *obliquity = fmod(*obliquity, M_PI) + M_PI;
                 }
             }
             else {
+                // only axial YORP effect
                 *rotation_frequency += frac*dt;
             }
         }

@@ -1,8 +1,8 @@
 /**
  * YORP Effect on a Single Asteroid
  * 
- * This example shows the effect of the YORP radiation force on a single asteroid rotating near break-up speed,
- * in orbit around a red giant. The fragmentation process is defined in a custom heartbeat function and produces
+ * This example shows the effect of the YORP radiation force on the rotation frequency and obliquity of a single
+ * asteroid in orbit around a red giant. The fragmentation process is defined in a custom heartbeat function and produces
  * a binary asteroid with a few smaller fragments called "shards". Since we are using test particles (where the mass
  * is set to 0), this is a simplified model and does not include binary interactions between the asteroid fragments. 
  */
@@ -15,13 +15,16 @@
 #include "reboundx.h"
 
 void heartbeat(struct reb_simulation* sim);
+int tsteps; // number of timesteps that have passed
 
 int main(int argc, char* argv[]) {
 
+    tsteps = 0; // initialize number of timesteps
+
     struct reb_simulation* sim = reb_simulation_create(); // create simulation
 
-    sim->G = 4*M_PI*M_PI;  // use units of AU, yr and solar masses
-    sim->dt = 0.01;         // timestep for simulation in yrs
+    sim->G = 4*M_PI*M_PI; // use units of AU, yr and solar masses
+    sim->dt = 1.; // timestep for simulation in yrs
     sim->integrator = REB_INTEGRATOR_WHFAST; // integrator for sim
     sim->heartbeat = heartbeat; // function pointer for heartbeat
 
@@ -30,10 +33,10 @@ int main(int argc, char* argv[]) {
     star.m = 1.;
     reb_simulation_add(sim, star);
 
-    // orbital elements of the asteroid to add
+    // asteroid orbital parameters
     double m = 0;
-    double a = 5.;
-    double e = 0;
+    double a = 5.; // semi-major axis of 5 AU
+    double e = 0; // no eccentricity
     double inc = 0;
     double Omega = 0;
     double omega = 0;
@@ -46,69 +49,91 @@ int main(int argc, char* argv[]) {
     
     // pointers needed to set parameters and add YORP effect to sim
     struct reb_particle* const particles = sim->particles; // pointer for the particles in the sim
-    struct rebx_extras* rebx = rebx_attach(sim);
+    struct rebx_extras* rebx = rebx_attach(sim); // attach REBOUNDx to the sim
     struct rebx_operator* yorp = rebx_load_operator(rebx, "yorp_effect"); // pointer for yorp operator
     
     // constant conversions
-    double au_conv = 1.495978707e11;
-    double msun_conv = 1.9885e30;
-    double yr_conv = 31557600.0;
+    double au_conv = 1.495978707e11; // meters in one AU
+    double msun_conv = 1.9885e30; // kg in one solar mass
+    double yr_conv = 31557600.0; // seconds in one year
 
-    // parameter values for the asteroid and the effect
-    double radius = 100./au_conv;
-    double c_body = 1./10./10.;
-    double phi = 1.e17/au_conv/msun_conv*yr_conv*yr_conv;
-    double density = (2000.0*au_conv*au_conv*au_conv)/msun_conv;
+    // effect parameters
+    double phi = 1.e17/au_conv/msun_conv*yr_conv*yr_conv; // solar radiation constant in units of (solar mass AU yr^-2)
     double lstar = 1000.; // luminosity MUST be in units of solar luminosity
-    double rotation_frequency = 0.*yr_conv;
-    double sigma = 1.e3/msun_conv*au_conv*yr_conv*yr_conv;
 
-    // obliquity parameters
-    double obliquity = M_PI/6.;
-    double alpha = 2.0/3.0;
-    double beta = 1.0/3.0;
+    // asteroid parameters
+    double rotation_frequency = 0.0*yr_conv; // initial rotation frequency in rad/yr
+    double c_body = 1./10./10.; // YORP coefficient (asymmetry) of the body
+    double density = (2000.0*au_conv*au_conv*au_conv)/msun_conv; // density in units of solar mass AU^-3
+    double radius = 100./au_conv; // radius in units of AU
+    double sigma = 1.e3/msun_conv*au_conv*yr_conv*yr_conv; // tensile strength in units of solar mass AU^-1 yr^-2
+    
+    // asteroid obliquity parameters
+    double obliquity = M_PI/6.; // initial obliquity in radians
+    double alpha = 2.0/3.0; // constant relating the axial and obliquity YORP coefficients
+    double beta = 1.0/3.0; // fitting coefficient
 
-    // set parameters for the asteroid and for the YORP effect
-    rebx_set_param_double(rebx, &sim->particles[1].ap, "yorp_c_body", c_body);
-    rebx_set_param_double(rebx, &yorp->ap, "yorp_lstar", lstar);
+    // set parameters for the YORP effect
     rebx_set_param_double(rebx, &yorp->ap, "yorp_solar_radiation_constant", phi);
+    rebx_set_param_double(rebx, &yorp->ap, "yorp_lstar", lstar);
+
+    // set parameters for the asteroid
+    rebx_set_param_double(rebx, &sim->particles[1].ap, "yorp_rotation_frequency", rotation_frequency);
+    rebx_set_param_double(rebx, &sim->particles[1].ap, "yorp_c_body", c_body);
     rebx_set_param_double(rebx, &sim->particles[1].ap, "yorp_body_density", density);
     particles[1].r = radius;
-    rebx_set_param_double(rebx, &sim->particles[1].ap, "yorp_rotation_frequency", rotation_frequency);
     rebx_set_param_double(rebx, &sim->particles[1].ap, "yorp_tensile_strength", sigma);
+
+    // set obliquity parameters for the asteroid
     rebx_set_param_double(rebx, &sim->particles[1].ap, "yorp_obliquity", obliquity);
     rebx_set_param_double(rebx, &sim->particles[1].ap, "yorp_alpha", alpha);
     rebx_set_param_double(rebx, &sim->particles[1].ap, "yorp_beta", beta);
 
-    rebx_add_operator(rebx, yorp);
+    rebx_add_operator(rebx, yorp); // add YORP effect to the sim
 
-    // integrate the simulation over tmax time
-    double tmax = 1.E3;
+    // initialize output files for plotting
+    FILE *fptr1; // time output file
+    fptr1 = fopen("times.txt", "w");
+    fclose(fptr1);
+
+    FILE *fptr2; // rotation frequency output file
+    fptr2 = fopen("omegas.txt", "w");
+    fclose(fptr2);
+
+    FILE *fptr3; // obliquity output file
+    fptr3 = fopen("obliquities.txt", "w");
+    fclose(fptr3);
+
+    // integrate the simulation over tmax time (in this case, 1 Myr)
+    double tmax = 1.5E7;
     reb_simulation_integrate(sim, tmax);
 
     // print final rotation frequency and radius for each asteroid
     for(int i=1; i<(sim->N); i++){
         struct reb_particle* p = &sim->particles[i];
-        double* final_w = rebx_get_param(sim->extras, p->ap, "yorp_rotation_frequency"); // final rotation frequency
-        *final_w = *final_w/yr_conv;
-        double* final_eps = rebx_get_param(sim->extras, p->ap, "yorp_obliquity"); // final obliquity
-        *final_eps = 180.0*(*final_eps)/M_PI;
 
+        double* final_w = rebx_get_param(sim->extras, p->ap, "yorp_rotation_frequency"); // final rotation frequency
+        *final_w = *final_w/yr_conv; // convert to rad/s
+
+        double* final_eps = rebx_get_param(sim->extras, p->ap, "yorp_obliquity"); // final obliquity
+        *final_eps = 180.0*(*final_eps)/M_PI; // convert to degrees
+
+        // print final values
         printf("\nASTEROID %d FINAL ROTATION FREQUENCY: %1.10f rad/s\n", i, *final_w);
         printf("ASTEROID %d FINAL OBLIQUITY: %1.2f deg\n", i, *final_eps);
         printf("ASTEROID %d FINAL RADIUS: %1.5f m\n", i, (p->r)*au_conv);
     }
-
-    rebx_free(rebx);
-    
+    rebx_free(rebx); // free REBOUNDx memory
 }
 
+// heartbeat function to check for fragmentation due to YORP spin-up and to record data
 void heartbeat(struct reb_simulation* sim) {
-    double G = sim->G;
+    tsteps += 1; // increment number of timesteps
+    double G = sim->G; // gravitational constant
 
-    // unit conversion
-    double au_conv = 1.495978707e11;
-    double yr_conv = 31557600.0;
+    // unit conversions
+    double au_conv = 1.495978707e11; // meters in one AU
+    double yr_conv = 31557600.0; // seconds in one year
 
     // minimum radius at which a particle will fragment
     double min_r = 10.0/au_conv;
@@ -122,14 +147,25 @@ void heartbeat(struct reb_simulation* sim) {
         double* rotation_frequency = rebx_get_param(sim->extras, p->ap, "yorp_rotation_frequency");
         double r = p->r;
 
-        // DEBUGGING
-        if ((0.0 < sim->t && sim->t < 0.1)||(26.25 < sim->t && sim->t < 26.3)){
+        // record time, rotation frequency, and obliquity of first asteroid every 100 timesteps
+        if ((i == 1) && (tsteps % 100 == 0)){
             const double* omega1 = rebx_get_param(sim->extras, p->ap, "yorp_rotation_frequency");
             const double* obliq1 = rebx_get_param(sim->extras, p->ap, "yorp_obliquity");
 
-            printf("\nParams at t = %1.15f yr:\n", sim->t);
-            printf("\tomega = %1.10f rad/yr\n", *omega1);
-            printf("\tobliquity = %1.10f rad\n", *obliq1);
+            FILE *fptr1; // time output file
+            fptr1 = fopen("times.txt", "a");
+            fprintf(fptr1, "%1.17f\n", sim->t);
+            fclose(fptr1);
+
+            FILE *fptr2; // rotation frequency output file
+            fptr2 = fopen("omegas.txt", "a");
+            fprintf(fptr2, "%1.17f\n", *omega1/yr_conv);
+            fclose(fptr2);
+
+            FILE *fptr3; // obliquity output file
+            fptr3 = fopen("obliquities.txt", "a");
+            fprintf(fptr3, "%1.17f\n", *obliq1);
+            fclose(fptr3);
         }
 
         // Eq. 2 in Veras and Scheeres (2020). Actually the failure spin rate squared.
@@ -180,10 +216,10 @@ void heartbeat(struct reb_simulation* sim) {
             struct reb_particle* new_particle = &sim->particles[sim->N - 1];
 
             // set simulation-specific parameters for the new fragment
+            rebx_set_param_double(sim->extras, &new_particle->ap, "yorp_rotation_frequency", reset_rotation_frequency);
             rebx_set_param_double(sim->extras, &new_particle->ap, "yorp_c_body", *c_body);
             rebx_set_param_double(sim->extras, &new_particle->ap, "yorp_body_density", *density);
             rebx_set_param_double(sim->extras, &new_particle->ap, "yorp_tensile_strength", *sigma);
-            rebx_set_param_double(sim->extras, &new_particle->ap, "yorp_rotation_frequency", reset_rotation_frequency);
             rebx_set_param_double(sim->extras, &new_particle->ap, "yorp_obliquity", *obliquity);
             rebx_set_param_double(sim->extras, &new_particle->ap, "yorp_alpha", *alpha);
             rebx_set_param_double(sim->extras, &new_particle->ap, "yorp_beta", *beta);
@@ -204,21 +240,19 @@ void heartbeat(struct reb_simulation* sim) {
                 shard.vx = p->vx;
                 shard.vy = p->vy;
                 shard.vz = p->vz;
-        
                 reb_simulation_add(sim, shard);
 
                 // address of new particle
                 struct reb_particle* new_particle = &sim->particles[sim->N - 1];
 
                 // set simulation-specific parameters for the new shard
+                rebx_set_param_double(sim->extras, &new_particle->ap, "yorp_rotation_frequency", reset_rotation_frequency);
                 rebx_set_param_double(sim->extras, &new_particle->ap, "yorp_c_body", *c_body);
                 rebx_set_param_double(sim->extras, &new_particle->ap, "yorp_body_density", *density);
                 rebx_set_param_double(sim->extras, &new_particle->ap, "yorp_tensile_strength", *sigma);
-                rebx_set_param_double(sim->extras, &new_particle->ap, "yorp_rotation_frequency", reset_rotation_frequency);
                 rebx_set_param_double(sim->extras, &new_particle->ap, "yorp_obliquity", *obliquity);
                 rebx_set_param_double(sim->extras, &new_particle->ap, "yorp_alpha", *alpha);
                 rebx_set_param_double(sim->extras, &new_particle->ap, "yorp_beta", *beta);
-
             }
         }
     }
