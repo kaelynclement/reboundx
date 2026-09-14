@@ -41,12 +41,12 @@ class TestSimulationarchive(unittest.TestCase):
                 self.assertLess(np.abs((E-self.E0)/self.E0), 1.e-4, msg='REB integrator: {0}, REBX integrator: {1}'.format(integrator, rebxintegrator))
                
                 # test bitwise reproducibility starting from an intermediate snapshot
-                self.sim.save_to_file('test.sa', delete_file=True)
-                self.rebx.save('test.rebx')
+                self.sim.save_to_file('test.sa'+self._testMethodName, delete_file=True)
+                self.rebx.save('test.rebx'+self._testMethodName)
                 self.sim.integrate(2000)
-                self.sim.save_to_file('test.sa')
+                self.sim.save_to_file('test.sa'+self._testMethodName)
 
-                sa = reboundx.Simulationarchive('test.sa', 'test.rebx')
+                sa = reboundx.Simulationarchive('test.sa'+self._testMethodName, 'test.rebx'+self._testMethodName)
                 simf, rebxf = sa[-1]
                 tmax = simf.t
                 sim, rebx = sa[0]
@@ -58,7 +58,10 @@ class TestSimulationarchive(unittest.TestCase):
             for rebxintegrator in rebxintegrators:
                 self.setUp()
                 self.sim.integrator = integrator
-                self.sim.ri_ias15.epsilon = 0 # use fixed timesteps for ias15 if used, no problem otherwise
+                try:
+                    self.sim.integrator.epsilon = 0 # use fixed timesteps for ias15 if used, no problem otherwise
+                except:
+                    pass # only ias15 has epsilon property
                 self.integforce = self.rebx.load_operator("integrate_force")
                 self.integforce.params['force'] = self.gr
                 self.rebx.add_operator(self.integforce, dtfraction=1., timing="pre")
@@ -71,12 +74,12 @@ class TestSimulationarchive(unittest.TestCase):
                 self.assertLess(np.abs((E-self.E0)/self.E0), 1.e-4, msg='REB integrator: {0}, REBX integrator: {1}'.format(integrator, rebxintegrator))
                
                 # test bitwise reproducibility starting from an intermediate snapshot
-                self.sim.save_to_file('test.sa', delete_file=True)
-                self.rebx.save('test.rebx')
+                self.sim.save_to_file('test.sa'+self._testMethodName, delete_file=True)
+                self.rebx.save('test.rebx'+self._testMethodName)
                 self.sim.integrate(2000)
-                self.sim.save_to_file('test.sa')
+                self.sim.save_to_file('test.sa'+self._testMethodName)
 
-                sa = reboundx.Simulationarchive('test.sa', 'test.rebx')
+                sa = reboundx.Simulationarchive('test.sa'+self._testMethodName, 'test.rebx'+self._testMethodName)
                 simf, rebxf = sa[-1]
                 tmax = simf.t
                 sim, rebx = sa[0]
@@ -88,7 +91,10 @@ class TestSimulationarchive(unittest.TestCase):
             for rebxintegrator in rebxintegrators:
                 self.setUp()
                 self.sim.integrator = integrator
-                self.sim.ri_ias15.epsilon = 0 # use fixed timesteps for ias15 if used, no problem otherwise
+                try:
+                    self.sim.integrator.epsilon = 0 # use fixed timesteps for ias15 if used, no problem otherwise
+                except:
+                    pass # only ias15 has epsilon property
                 self.integforce = self.rebx.load_operator("integrate_force")
                 self.integforce.params['force'] = self.gr
                 self.rebx.add_operator(self.integforce, dtfraction=1., timing="post")
@@ -101,12 +107,12 @@ class TestSimulationarchive(unittest.TestCase):
                 self.assertLess(np.abs((E-self.E0)/self.E0), 1.e-4, msg='REB integrator: {0}, REBX integrator: {1}'.format(integrator, rebxintegrator))
                
                 # test bitwise reproducibility starting from an intermediate snapshot
-                self.sim.save_to_file('test.sa', delete_file=True)
-                self.rebx.save('test.rebx')
+                self.sim.save_to_file('test.sa'+self._testMethodName, delete_file=True)
+                self.rebx.save('test.rebx'+self._testMethodName)
                 self.sim.integrate(2000)
-                self.sim.save_to_file('test.sa')
+                self.sim.save_to_file('test.sa'+self._testMethodName)
 
-                sa = reboundx.Simulationarchive('test.sa', 'test.rebx')
+                sa = reboundx.Simulationarchive('test.sa'+self._testMethodName, 'test.rebx'+self._testMethodName)
                 simf, rebxf = sa[-1]
                 tmax = simf.t
                 sim, rebx = sa[0]
@@ -118,7 +124,10 @@ class TestSimulationarchive(unittest.TestCase):
             for rebxintegrator in rebxintegrators:
                 self.setUp()
                 self.sim.integrator = integrator
-                self.sim.ri_ias15.epsilon = 0 # use fixed timesteps for ias15 if used, no problem otherwise
+                try:
+                    self.sim.integrator.epsilon = 0 # use fixed timesteps for ias15 if used, no problem otherwise
+                except:
+                    pass # only ias15 has epsilon property
                 self.integforce = self.rebx.load_operator("integrate_force")
                 self.integforce.params['force'] = self.gr
                 self.rebx.add_operator(self.integforce)
@@ -131,12 +140,12 @@ class TestSimulationarchive(unittest.TestCase):
                 self.assertLess(np.abs((E-self.E0)/self.E0), 1.e-4, msg='REB integrator: {0}, REBX integrator: {1}'.format(integrator, rebxintegrator))
                
                 # test bitwise reproducibility starting from an intermediate snapshot
-                self.sim.save_to_file('test.sa', delete_file=True)
-                self.rebx.save('test.rebx')
+                self.sim.save_to_file('test.sa'+self._testMethodName, delete_file=True)
+                self.rebx.save('test.rebx'+self._testMethodName)
                 self.sim.integrate(2000)
-                self.sim.save_to_file('test.sa')
+                self.sim.save_to_file('test.sa'+self._testMethodName)
 
-                sa = reboundx.Simulationarchive('test.sa', 'test.rebx')
+                sa = reboundx.Simulationarchive('test.sa'+self._testMethodName, 'test.rebx'+self._testMethodName)
                 simf, rebxf = sa[-1]
                 tmax = simf.t
                 sim, rebx = sa[0]

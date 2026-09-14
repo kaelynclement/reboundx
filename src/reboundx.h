@@ -31,12 +31,22 @@
 
 #include <stdint.h>
 #include <limits.h>
+#include <stdio.h>
 #include "rebound.h"
-#include "rebxtools.h"
 #ifndef REBXGITHASH
 #define REBXGITHASH notavailable0000000000000000000000000001
 #endif // REBXGITHASH
 
+/**
+ * @brief Macro for the common task of getting and casting a pointer to a particle's additional-parameters
+ *
+ * Casts `&p.ap` (a `void**`) to `struct rebx_node**` as expected by several functions like
+ * the various `rebx_set_param` and `rebx_get_param` functions.
+ *
+ * @param p A `struct reb_particle`
+ */
+
+#define AP_PTR(p) ((struct rebx_node**)&(p).ap) //
 extern const char* rebx_build_str;      ///< Date and time build string.
 extern const char* rebx_version_str;    ///< Version string.
 extern const char* rebx_githash_str;    ///< Current git hash.
@@ -57,7 +67,8 @@ enum rebx_param_type{
     REBX_TYPE_UINT32,
     REBX_TYPE_ORBIT,
     REBX_TYPE_ODE,
-    REBX_TYPE_VEC3D
+    REBX_TYPE_VEC3D,
+    REBX_TYPE_STRING,
 };
 
 /**
@@ -196,6 +207,22 @@ struct rebx_param{
 };
 
 /**
+ * @brief Main REBOUNDx structure.
+ * @details These fields are used internally by REBOUNDx and generally should not be changed manually by the user. Use the API instead.
+ */
+struct rebx_extras {
+	struct reb_simulation* sim;					    ///< Pointer to the simulation REBOUNDx is linked to.
+
+    struct rebx_node* additional_forces;            ///< Linked list of extra forces
+    struct rebx_node* pre_timestep_modifications;   ///< Linked list of rebx_steps to apply before each timestep
+	struct rebx_node* post_timestep_modifications;  ///< Linked list of rebx_steps to apply after each timestep
+
+    struct rebx_node* registered_params;            ///< Linked list of rebx_params with all the parameter names registered with their type (for type safety)
+    struct rebx_node* allocated_forces;             ///< For memory management
+    struct rebx_node* allocated_operators;          ///< For memory management
+};
+
+/**
  * @brief Structure for REBOUNDx forces.
  */
 struct rebx_force{
@@ -205,6 +232,7 @@ struct rebx_force{
     // See comments in params.py in __init__
     enum rebx_force_type force_type;    ///< Force type for internal logic
     void (*update_accelerations) (struct reb_simulation* const sim, struct rebx_force* const force, struct reb_particle* const particles, const int N); ///< Function pointer to add additional accelerations
+    void (*free_memory) (struct rebx_extras* rebx, struct rebx_force* const force); ///< Optional function pointer to free memory the force allocated internally. Called by rebx_free_force
 };
 
 /**
@@ -217,6 +245,7 @@ struct rebx_operator{
     // See comments in params.py in __init__
     enum rebx_operator_type operator_type;  ///< Operator type for internal logic
     void (*step_function) (struct reb_simulation* sim, struct rebx_operator* operator, const double dt);       ///< Function pointer to execute step
+    void (*free_memory) (struct rebx_extras* rebx, struct rebx_operator* const operator); ///< Optional function pointer to free memory the force allocated internally. Called by rebx_free_force
 };
 
 /**
@@ -244,22 +273,6 @@ struct rebx_interpolator{
     double* y2;
     int klo;
 };
-/**
- * @brief Main REBOUNDx structure.
- * @details These fields are used internally by REBOUNDx and generally should not be changed manually by the user. Use the API instead.
- */
-struct rebx_extras {
-	struct reb_simulation* sim;					    ///< Pointer to the simulation REBOUNDx is linked to.
-
-    struct rebx_node* additional_forces;            ///< Linked list of extra forces
-    struct rebx_node* pre_timestep_modifications;   ///< Linked list of rebx_steps to apply before each timestep
-	struct rebx_node* post_timestep_modifications;  ///< Linked list of rebx_steps to apply after each timestep
-
-    struct rebx_node* registered_params;            ///< Linked list of rebx_params with all the parameter names registered with their type (for type safety)
-    struct rebx_node* allocated_forces;             ///< For memory management
-    struct rebx_node* allocated_operators;          ///< For memory management
-};
-
 /****************************************
   General REBOUNDx Functions
 *****************************************/
@@ -280,12 +293,8 @@ struct rebx_extras {
  */
 struct rebx_extras* rebx_attach(struct reb_simulation* sim);
 
-/**
- * @brief Detaches REBOUNDx from simulation, resetting all the simulation's function pointers that REBOUNDx has set.
- * @details This does not free the memory allocated by REBOUNDx (call rebx_free).
- * @param sim Pointer to the simulation from which to remove REBOUNDx
- */
-void rebx_detach(struct reb_simulation* sim, struct rebx_extras* rebx);
+// internal functions
+void rebx_detach(struct rebx_extras* rebx);
 void rebx_extras_cleanup(struct reb_simulation* sim);
 /**
  * @brief Frees all memory allocated by REBOUNDx instance.
@@ -422,6 +431,7 @@ void rebx_set_param_double(struct rebx_extras* const rebx, struct rebx_node** ap
 void rebx_set_param_int(struct rebx_extras* const rebx, struct rebx_node** apptr, const char* const param_name, int val);
 void rebx_set_param_uint32(struct rebx_extras* const rebx, struct rebx_node** apptr, const char* const param_name, uint32_t val);
 void rebx_set_param_vec3d(struct rebx_extras* const rebx, struct rebx_node** apptr, const char* const param_name, struct reb_vec3d val);
+void rebx_set_param_string(struct rebx_extras* const rebx, struct rebx_node** apptr, const char* const param_name, const char* const val);
 void rebx_register_param(struct rebx_extras* const rebx, const char* name, enum rebx_param_type type);
 
 /** @} */
@@ -570,6 +580,20 @@ double rebx_central_force_potential(struct rebx_extras* const rebx);
  * @return Potential corresponding to the effect from all particles of their additional gravity field harmonics
  */
 double rebx_gravitational_harmonics_potential(struct rebx_extras* const rebx);
+
+struct rebx_tides_dynamical_params
+{
+    double dP;
+    double dE_alpha;
+    double sigma;
+};
+struct rebx_tides_dynamical_mode
+{
+    double real;
+    double imag;
+    char mode;
+};
+struct rebx_tides_dynamical_mode rebx_calculate_tides_dynamical_mode_evolution(double old_real, double old_imag, double dc_tilde, double P, double sigma);
 
 /** @} */
 /** @} */

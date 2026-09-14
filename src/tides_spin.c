@@ -105,7 +105,7 @@ struct reb_vec3d rebx_calculate_spin_orbit_accelerations(struct reb_particle* so
     const double t1 = 5. * omega_dot_d * omega_dot_d / (2. * (dr * dr * dr * dr * dr * dr * dr));
     const double t2 = omega_squared / (2. * (dr * dr * dr * dr * dr));
     const double t3 = omega_dot_d / (dr * dr * dr * dr * dr);
-    const double t4 = 6. * G * mt / (dr * dr * dr * dr * dr * dr * dr * dr);
+    const double t4 = 3. * G * mt / (dr * dr * dr * dr * dr * dr * dr * dr);
 
     tot_force.x = (quad_prefactor * ((t1 - t2 - t4) * dx - (t3 * Omega.x)));
     tot_force.y = (quad_prefactor * ((t1 - t2 - t4) * dy - (t3 * Omega.y)));
@@ -170,8 +170,8 @@ static void rebx_spin_derivatives(struct reb_ode* const ode, double* const yDot,
     struct reb_simulation* sim = ode->ref;
     struct rebx_extras* const rebx = sim->extras;
     unsigned int Nspins = 0;
-    const int N_real = sim->N - sim->N_var;
-    for (int i=0; i<N_real; i++){
+    const int N = sim->N;
+    for (int i=0; i<N; i++){
         struct reb_particle* pi = &sim->particles[i]; // target particle
         const double* k2 = rebx_get_param(rebx, pi->ap, "k2"); // This is slow
         const double* tau = rebx_get_param(rebx, pi->ap, "tau");
@@ -191,7 +191,7 @@ static void rebx_spin_derivatives(struct reb_ode* const ode, double* const yDot,
           yDot[3*Nspins + 2] = 0;
 
           const struct reb_vec3d Omega = {.x=y[3*Nspins], .y=y[3*Nspins+1], .z=y[3*Nspins+2]};
-          for (int j=0; j<N_real; j++){
+          for (int j=0; j<N; j++){
             if (i != j){
                 struct reb_particle* pj = &sim->particles[j];
 
@@ -238,8 +238,8 @@ static void rebx_spin_sync_pre(struct reb_ode* const ode, const double* const y0
     struct reb_simulation* sim = ode->ref;
     struct rebx_extras* const rebx = sim->extras;
     unsigned int Nspins = 0;
-    const int N_real = sim->N - sim->N_var;
-    for (int i=0; i<N_real; i++){
+    const int N = sim->N;
+    for (int i=0; i<N; i++){
         struct reb_particle* p = &sim->particles[i];
         double* I = rebx_get_param(rebx, p->ap, "I");
         struct reb_vec3d* Omega = rebx_get_param(rebx, p->ap, "Omega");
@@ -262,8 +262,8 @@ static void rebx_spin_sync_post(struct reb_ode* const ode, const double* const y
     struct reb_simulation* sim = ode->ref;
     struct rebx_extras* const rebx = sim->extras;
     unsigned int Nspins = 0;
-    const int N_real = sim->N - sim->N_var;
-    for (int i=0; i<N_real; i++){
+    const int N = sim->N;
+    for (int i=0; i<N; i++){
         struct reb_particle* p = &sim->particles[i];
         double* I = rebx_get_param(rebx, p->ap, "I");
         struct reb_vec3d* Omega = rebx_get_param(rebx, p->ap, "Omega");
@@ -281,8 +281,8 @@ static void rebx_spin_sync_post(struct reb_ode* const ode, const double* const y
 void rebx_spin_initialize_ode(struct rebx_extras* const rebx, struct rebx_force* const effect){
     struct reb_simulation* sim = rebx->sim;
     unsigned int Nspins = 0;
-    const int N_real = sim->N - sim->N_var;
-    for (int i=0; i<N_real; i++){
+    const int N = sim->N;
+    for (int i=0; i<N; i++){
         struct reb_particle* p = &sim->particles[i];
         // Only track spin if particle has moment of inertia and valid spin axis set
         double* I = rebx_get_param(rebx, p->ap, "I");
@@ -370,7 +370,7 @@ static double rebx_calculate_spin_potential(struct reb_particle* source, struct 
 
     const double t1 = -mt * big_a * omega_dot_d * omega_dot_d / (2 * d2 * d2 * dr);
     const double t2 = mt * big_a * omega_squared / (6 * d2 * dr);
-    const double t3 = G * mt * mt * big_a / (d2 * d2 * d2);
+    const double t3 = G * mt * mt * big_a / (2. * d2 * d2 * d2);
 
     return -(t1 + t2 + t3);
 }
@@ -381,12 +381,12 @@ double rebx_tides_spin_energy(struct rebx_extras* const rebx){
         return 0;
     }
     struct reb_simulation* const sim = rebx->sim;
-    const int N_real = sim->N - sim->N_var;
+    const int N = sim->N;
     struct reb_particle* const particles = sim->particles;
     const double G = sim->G;
     double E=0.;
 
-    for (int i=0; i<N_real; i++){
+    for (int i=0; i<N; i++){
         struct reb_particle* source = &particles[i];
         // Particle must have a k2, radius and mass set, otherwise we treat this body as a point particle
         const double* k2 = rebx_get_param(rebx, source->ap, "k2");
@@ -403,7 +403,7 @@ double rebx_tides_spin_energy(struct rebx_extras* const rebx){
             const double omega_squared = Omega.x * Omega.x + Omega.y * Omega.y + Omega.z * Omega.z;
             E += 0.5 * (*I) * omega_squared;
         }
-        for (int j=0; j<N_real; j++){
+        for (int j=0; j<N; j++){
             if (i==j){
                 continue;
             }

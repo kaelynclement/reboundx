@@ -58,6 +58,7 @@
 #include <float.h>
 #include <limits.h>
 #include "rebound.h"
+#include "transformations.h"
 #include "reboundx.h"
 #include "rebxtools.h"
 
@@ -67,7 +68,7 @@ static void rebx_calculate_gr(struct reb_simulation* const sim, struct reb_parti
     struct reb_particle* const ps_j = malloc(N*sizeof(*ps_j));
     memcpy(ps, particles, N*sizeof(*ps));
    
-    const int N_active = sim->N_active > 0 ? sim->N_active : N; // additional_forces passes N=N-N_var. Think about this if adding variational particles
+    const int N_active = sim->N_active == SIZE_MAX ? N : sim->N_active;
     // Calculate Newtonian accelerations 
     for(int i=0; i<N; i++){
         ps[i].ax = 0.;
@@ -97,7 +98,7 @@ static void rebx_calculate_gr(struct reb_simulation* const sim, struct reb_parti
     // Transform to Jacobi coordinates
     const struct reb_particle source = ps[0];
 	const double mu = G*source.m;
-    reb_particles_transform_inertial_to_jacobi_posvelacc(ps, ps_j, ps, N, N_active);
+    reb_transformations_inertial_to_jacobi_posvelacc(ps, ps_j, ps, N, N_active);
     
     for (int i=1; i<N; i++){
         struct reb_particle p = ps_j[i];
@@ -151,7 +152,7 @@ static void rebx_calculate_gr(struct reb_simulation* const sim, struct reb_parti
     ps_j[0].ay = 0.;
     ps_j[0].az = 0.;
 
-    reb_particles_transform_jacobi_to_inertial_acc(ps, ps_j, ps, N, N_active);
+    reb_transformations_jacobi_to_inertial_acc(ps, ps_j, ps, N, N_active);
     for (int i=0; i<N; i++){
         particles[i].ax += ps[i].ax;
         particles[i].ay += ps[i].ay;
@@ -180,7 +181,7 @@ void rebx_gr(struct reb_simulation* const sim, struct rebx_force* const force, s
 }
 
 static double rebx_calculate_gr_hamiltonian(struct rebx_extras* const rebx, struct reb_simulation* const sim, const double C2){
-    const int N = sim->N - sim->N_var;
+    const int N = sim->N;
     const double G = sim->G;
 
     struct reb_particle* const ps_j = malloc(N*sizeof(*ps_j));
@@ -206,7 +207,7 @@ static double rebx_calculate_gr_hamiltonian(struct rebx_extras* const rebx, stru
 	const double mu = G*source.m;
     double* const m_j = malloc(N*sizeof(*m_j));
     rebx_calculate_jacobi_masses(ps, m_j, N);
-    reb_particles_transform_inertial_to_jacobi_posvel(ps, ps_j, ps, N, N);
+    reb_transformations_inertial_to_jacobi_posvel(ps, ps_j, ps, N, N);
 
     double T = 0.5*m_j[0]*(ps_j[0].vx*ps_j[0].vx + ps_j[0].vy*ps_j[0].vy + ps_j[0].vz*ps_j[0].vz);
     double V_PN = 0.;

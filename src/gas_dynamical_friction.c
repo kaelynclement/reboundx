@@ -30,7 +30,7 @@
  * ======================= ===============================================
  * Authors                 A. Generozov, H. Perets
  * Implementation Paper    `Generozov and Perets 2022 <https://arxiv.org/abs/2212.11301>`_
- * Based on                `Ostriker 1999 (with simplifications) <https://ui.adsabs.harvard.edu/abs/1999ApJ...513..252O/abstract>`_, `Just et al 2012 <https://ui.adsabs.harvard.edu/abs/2012ApJ...758...51J/abstract>`_.
+ * Based on                `Ostriker 1999 (with simplifications) <https://ui.adsabs.harvard.edu/abs/1999ApJ...513..252O/abstract>`_, `Just et al 2012 <https://ui.adsabs.harvard.edu/abs/2012ApJ...758...51J/abstract>`_
  * C Example               :ref:`c_example_gas_dynamical_friction`
  * Python Example          `GasDynamicalFriction.ipynb <https://github.com/dtamayo/reboundx/blob/master/ipython_examples/GasDynamicalFriction.ipynb>`_
  *                        
@@ -103,10 +103,10 @@ static void get_vrel_disk(const struct reb_particle p, const double GMBH, double
 static void rebx_calculate_gas_dynamical_friction(struct reb_simulation* const sim, struct reb_particle* const particles,\
     const int N, const double rhog, const double alpha_rhog, const double cs, const double alpha_cs, const double xmin, const double hr, const double Qd){
 
-    const int _N_real = sim->N - sim->N_var;
+    const int N_real = sim->N;
     const struct reb_particle bh = particles[0];
 #pragma omp parallel for
-    for (int i=1;i<_N_real;i++){
+    for (int i=1;i<N_real;i++){
         const struct reb_particle p = particles[i];
         struct reb_particle diff = p;
         struct reb_particle bh2  = bh;

@@ -40,11 +40,18 @@ with open("src/core.c") as f:
     with open("src/core.c", "w") as f:
         f.writelines(reboundxlines)
 
+with open("pyproject.toml") as f:
+    pyprojectlines = f.readlines()
+    for i,l in enumerate(pyprojectlines):
+        if "version = '" in l:
+            pyprojectlines[i] = "version = '"+reboundxversion+"'\n"
+
+    with open("pyproject.toml", "w") as f:
+        f.writelines(pyprojectlines)
+
 with open("setup.py") as f:
     setuplines = f.readlines()
     for i,l in enumerate(setuplines):
-        if "version='" in l:
-            setuplines[i] = "    version='"+reboundxversion+"',\n"
         if "GITHASHAUTOUPDATE" in l:
             setuplines[i] = "    ghash_arg = \"-DREBXGITHASH="+ghash+"\" #GITHASHAUTOUPDATE\n"
 
@@ -96,5 +103,5 @@ print(changelog.strip())
 print("----")
 print("Next:")
 print("\ngit commit -a -m \""+reboundxversion+"\"")
-print("git tag "+reboundxversion+" && git push --tags")
+print("git tag "+reboundxversion+" && git push origin main && git push --tags")
 print("gh release create "+reboundxversion+" --notes-file _changelog.tmp")

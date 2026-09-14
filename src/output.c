@@ -104,7 +104,8 @@ long pos_start_##name = ftell(of);\
 /*  After we write all the data we need for the particular object, we calculate how long this segment is, and update the field struct with this size so we have option of skipping the whole object when reading.*/
 
 #define REBX_END_OBJECT_FIELD(name) {\
-REBX_WRITE_DATA_FIELD(END,        NULL,             0);\
+struct rebx_binary_field field = {.type = REBX_BINARY_FIELD_TYPE_END, .size=0};\
+fwrite(&field, sizeof(field), 1, of);\
 long pos_end_##name = ftell(of);\
 header_##name.size = pos_end_##name - pos_start_##name;\
 fseek(of, pos_start_header_##name, SEEK_SET);\
@@ -132,7 +133,7 @@ static void rebx_write_force_param(struct rebx_extras* rebx, struct rebx_param* 
 }
 
 static void rebx_write_param(struct rebx_extras* rebx, struct rebx_param* param, FILE* of){
-    if (param->type == REBX_TYPE_POINTER){ // Don't write pointers because we won't know how to load them when we read binary. Need to add type to store in binaries.
+    if (param->type == REBX_TYPE_POINTER || param->type == REBX_TYPE_ODE){ // Don't write pointers because we won't know how to load them when we read binary. Need to add type to store in binaries.
         return;
     }
     

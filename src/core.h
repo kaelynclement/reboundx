@@ -26,17 +26,9 @@
 #ifndef _REBX_CORE_H
 #define _REBX_CORE_H
 
-struct rebx_extras;
-struct rebx_param;
-enum rebx_param_type;
-struct rebx_step;
-struct rebx_node;
-
 #include <stdint.h>
 #include "rebound.h"
 #include "reboundx.h"
-
-
 
 /*****************************
  Internal initialization routine.
@@ -80,6 +72,8 @@ void rebx_tides_spin(struct reb_simulation* const sim, struct rebx_force* const 
 void rebx_yarkovsky_effect(struct reb_simulation* const sim, struct rebx_force* const force, struct reb_particle* const particles, const int N);
 void rebx_gas_dynamical_friction(struct reb_simulation* const sim, struct rebx_force* const force, struct reb_particle* const particles, const int N);
 void rebx_lense_thirring(struct reb_simulation* const sim, struct rebx_force* const force, struct reb_particle* const particles, const int N);
+void rebx_tides_dynamical(struct reb_simulation* const sim, struct rebx_force* const force, struct reb_particle* const particles, const int N);
+
 /****************************************
  Operator prototypes
  *****************************************/
@@ -102,7 +96,7 @@ void* rebx_malloc(struct rebx_extras* const rebx, size_t memsize);
 void rebx_free_ap(struct rebx_node** ap);
 void rebx_free_particle_ap(struct reb_particle* p);
 void rebx_free_force(struct rebx_extras* rebx, struct rebx_force* force);
-void rebx_free_operator(struct rebx_operator* operator);
+void rebx_free_operator(struct rebx_extras* rebx, struct rebx_operator* operator);
 void rebx_free_step(struct rebx_step* step);
 void rebx_free_pointers(struct rebx_extras* rebx);
 void rebx_free_param(struct rebx_param* param);

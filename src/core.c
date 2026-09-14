@@ -39,7 +39,7 @@
 #define str(s) #s
 
 const char* rebx_build_str = __DATE__ " " __TIME__; // Date and time build string.
-const char* rebx_version_str = "4.4.1";         // **VERSIONLINE** This line gets updated automatically. Do not edit manually.
+const char* rebx_version_str = "5.1.0";         // **VERSIONLINE** This line gets updated automatically. Do not edit manually.
 const char* rebx_githash_str = STRINGIFY(REBXGITHASH);             // This line gets updated automatically. Do not edit manually.
 
 
@@ -94,7 +94,6 @@ void rebx_register_default_params(struct rebx_extras* rebx){
     rebx_register_param(rebx, "tctl_k2", REBX_TYPE_DOUBLE);
     rebx_register_param(rebx, "tctl_tau", REBX_TYPE_DOUBLE);
     rebx_register_param(rebx, "integrator", REBX_TYPE_INT);
-    rebx_register_param(rebx, "free_arrays", REBX_TYPE_POINTER);
     rebx_register_param(rebx, "im_ps_final", REBX_TYPE_POINTER);
     rebx_register_param(rebx, "im_ps_prev", REBX_TYPE_POINTER);
     rebx_register_param(rebx, "im_ps_avg", REBX_TYPE_POINTER);
@@ -102,7 +101,7 @@ void rebx_register_default_params(struct rebx_extras* rebx){
     rebx_register_param(rebx, "rk4_k2", REBX_TYPE_POINTER);
     rebx_register_param(rebx, "rk4_k3", REBX_TYPE_POINTER);
     rebx_register_param(rebx, "min_distance", REBX_TYPE_DOUBLE);
-    rebx_register_param(rebx, "min_distance_from", REBX_TYPE_UINT32);
+    rebx_register_param(rebx, "min_distance_from", REBX_TYPE_STRING);
     rebx_register_param(rebx, "min_distance_orbit", REBX_TYPE_ORBIT);
     rebx_register_param(rebx, "luminosity", REBX_TYPE_DOUBLE);
     rebx_register_param(rebx, "ide_position", REBX_TYPE_DOUBLE);
@@ -144,6 +143,19 @@ void rebx_register_default_params(struct rebx_extras* rebx){
     rebx_register_param(rebx, "lt_p_haty", REBX_TYPE_DOUBLE);
     rebx_register_param(rebx, "lt_p_hatz", REBX_TYPE_DOUBLE);
     rebx_register_param(rebx, "lt_c", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "td_M_last", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "td_num_apoapsis", REBX_TYPE_INT);
+    rebx_register_param(rebx, "td_c_imag", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "td_c_real", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "td_dP_hat", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "td_dP_crit", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "td_EB0", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "td_E_max", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "td_E_resid", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "td_dE_last", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "td_last_apoapsis", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "td_drag_coef", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "td_disruption_flag", REBX_TYPE_INT);
     rebx_register_param(rebx, "yorp_c_body", REBX_TYPE_DOUBLE);
     rebx_register_param(rebx, "yorp_solar_radiation_constant", REBX_TYPE_DOUBLE);
     rebx_register_param(rebx, "yorp_body_density", REBX_TYPE_DOUBLE);
@@ -192,32 +204,10 @@ struct rebx_extras* rebx_attach(struct reb_simulation* sim){  // reboundx.h
 }
 
 void rebx_extras_cleanup(struct reb_simulation* sim){
+    // Called by REBOUND when sim is freed. We set to NULL so we have a way to check if sim still exists from REBOUNDx
     struct rebx_extras* rebx = sim->extras;
     rebx->sim = NULL;
 }
-
-void rebx_detach(struct reb_simulation* sim, struct rebx_extras* rebx){
-    if (sim == NULL){
-        return;
-    }
-    rebx->sim = NULL;
-
-    if (sim->extras == rebx){
-        if (sim->additional_forces == rebx_additional_forces){
-            sim->additional_forces = NULL;
-        }
-        if (sim->pre_timestep_modifications == rebx_pre_timestep_modifications){
-            sim->pre_timestep_modifications = NULL;
-        }
-        if (sim->post_timestep_modifications == rebx_post_timestep_modifications){
-            sim->post_timestep_modifications = NULL;
-        }
-        if (sim->free_particle_ap == rebx_free_particle_ap){
-            sim->free_particle_ap = NULL;
-        }
-    }
-}
-
 
 void rebx_initialize(struct reb_simulation* sim, struct rebx_extras* rebx){
     rebx->sim = sim; // python checks for rebx->sim = NULL so set 1st
@@ -242,7 +232,11 @@ void rebx_initialize(struct reb_simulation* sim, struct rebx_extras* rebx){
 }
 
 void rebx_free(struct rebx_extras* rebx){
+// In C, we don't know whether this is called by user before or after the user frees the sim
+// Each of first two functions are set up for either case
+// In python __del__ calls the first two functions (the rebx memory is owned by Python and gc'ed)
     rebx_free_pointers(rebx);
+    rebx_detach(rebx);
     free(rebx);
 }
 
@@ -263,6 +257,7 @@ struct rebx_force* rebx_create_force(struct rebx_extras* const rebx, const char*
     force->sim = rebx->sim;
     force->force_type = REBX_FORCE_NONE;
     force->update_accelerations = NULL;
+    force->free_memory = NULL;
     force->name = NULL;
     if(name != NULL)
     {
@@ -342,6 +337,7 @@ struct rebx_force* rebx_load_force(struct rebx_extras* const rebx, const char* n
         force->force_type = REBX_FORCE_VEL;
     }
     else if (strcmp(name, "tides_spin") == 0){
+        reb_simulation_warning(rebx->sim, "tides_spin was updated in version 4.5.0 to halve the acceleration from the conservative piece of the tidal potential, reflecting a typo discovered in Eggleton et. al (1998). This warning will be removed in a future version.\n");
         force->update_accelerations = rebx_tides_spin;
         force->force_type = REBX_FORCE_VEL;
     }
@@ -355,6 +351,10 @@ struct rebx_force* rebx_load_force(struct rebx_extras* const rebx, const char* n
     }
     else if (strcmp(name, "lense_thirring") == 0){
         force->update_accelerations = rebx_lense_thirring;
+        force->force_type = REBX_FORCE_VEL;
+    }
+    else if (strcmp(name, "tides_dynamical") == 0){
+        force->update_accelerations = rebx_tides_dynamical;
         force->force_type = REBX_FORCE_VEL;
     }
     else{
@@ -381,11 +381,12 @@ struct rebx_operator* rebx_create_operator(struct rebx_extras* const rebx, const
     operator->sim = rebx->sim;
     operator->operator_type = REBX_OPERATOR_NONE;
     operator->step_function = NULL;
+    operator->free_memory = NULL;
     operator->name = NULL;
     if(name != NULL){
         operator->name = rebx_malloc(rebx, strlen(name) + 1); // +1 for \0 at end
         if (operator->name == NULL){
-            rebx_free_operator(operator);
+            rebx_free_operator(rebx, operator);
             return NULL;
         }
         else{
@@ -396,7 +397,7 @@ struct rebx_operator* rebx_create_operator(struct rebx_extras* const rebx, const
     // Add operator to allocated_operators list for later freeing
     struct rebx_node* node = rebx_create_node(rebx);
     if (node == NULL){
-        rebx_free_operator(operator);
+        rebx_free_operator(rebx, operator);
         return NULL;
     }
     node->object = operator;
@@ -465,6 +466,11 @@ struct rebx_operator* rebx_load_operator(struct rebx_extras* const rebx, const c
 }
 
 int rebx_add_force(struct rebx_extras* rebx, struct rebx_force* force){
+    struct reb_simulation* const sim = rebx->sim;
+    if (strcmp(sim->integrator.name, "whfast512")==0){
+        reb_simulation_error(sim, "REBOUNDx Error: WHFast512 has been optimized for speed with options stripped out. This integrator will never be compatible with REBOUNDx.\n");
+        return 0;
+    }
     if (rebx->sim == NULL){
         rebx_error(rebx, ""); // rebx_error gives meaningful err
         return 0;
@@ -573,32 +579,32 @@ int rebx_add_operator(struct rebx_extras* rebx, struct rebx_operator* operator){
         int success = rebx_add_operator_step(rebx, operator, dt_fraction, REBX_TIMING_POST);
         return success;
     }
+    
+    reb_simulation_warning(sim, "REBOUNDx Warning: Do not change the integrator after adding an operator (function assumed the current integrator when adding)");
 
-    switch(sim->integrator){
-        case REB_INTEGRATOR_IAS15:
-        // don't add pre-timestep b/c don't know what IAS will choose as dt
-        {
-            dt_fraction = 1.;
-            int success = rebx_add_operator_step(rebx, operator, dt_fraction, REBX_TIMING_POST);
-            return success;
+    if (strcmp(sim->integrator.name, "ias15")==0 || strcmp(sim->integrator.name, "bs")==0){
+        // don't add pre-timestep b/c don't know what IAS/BS will choose as dt
+        dt_fraction = 1.;
+        int success = rebx_add_operator_step(rebx, operator, dt_fraction, REBX_TIMING_POST);
+        return success;
+    }
+    if (strcmp(sim->integrator.name, "whfast")==0 || strcmp(sim->integrator.name, "saba")==0 || strcmp(sim->integrator.name, "leapfrog")==0 || strcmp(sim->integrator.name, "eos")==0){ 
+        // half step pre and post
+        dt_fraction = 1./2.;
+        int success1 = rebx_add_operator_step(rebx, operator, dt_fraction, REBX_TIMING_PRE);
+        int success2 = rebx_add_operator_step(rebx, operator, dt_fraction, REBX_TIMING_POST);
+        return (success1 && success2);
+    }
+    if (strcmp(sim->integrator.name, "mercurius")==0 || strcmp(sim->integrator.name, "trace")==0 || strcmp(sim->integrator.name, "janus")==0 || strcmp(sim->integrator.name, "sei")==0){
+        // TODO: Not yet implemented.
+        if (operator->operator_type == REBX_OPERATOR_UPDATER){
+            reb_simulation_error(sim, "REBOUNDx Error: Operators that affect particle trajectories are not supported with MERCURIUS, TRACE, SEI or Janus. Can only add forces.\n");
+            return 0;
         }
-        case REB_INTEGRATOR_WHFAST: // half step pre and post
-        {
-            dt_fraction = 1./2.;
-            int success1 = rebx_add_operator_step(rebx, operator, dt_fraction, REBX_TIMING_PRE);
-            int success2 = rebx_add_operator_step(rebx, operator, dt_fraction, REBX_TIMING_POST);
-            return (success1 && success2);
-        }
-        case REB_INTEGRATOR_MERCURIUS: // half step pre and post
-        {
-            if (operator->operator_type == REBX_OPERATOR_UPDATER){
-                reb_simulation_error(sim, "REBOUNDx Error: Operators that affect particle trajectories are not supported with Mercurius. Must add as forces.\n");
-                return 0;
-            }
-            break;
-        }
-        default:
-            break;
+     }
+    if (strcmp(sim->integrator.name, "whfast512")==0){
+        reb_simulation_error(sim, "REBOUNDx Error: WHFast512 has been optimized for speed with options stripped out. This integrator will never be compatible with REBOUNDx.\n");
+        return 0;
     }
     return 0; // didn't reach a successful outcome
 }
@@ -658,6 +664,22 @@ void rebx_set_param_double(struct rebx_extras* const rebx, struct rebx_node** ap
     // Update new or existing param value
     double* valptr = param->value;
     *valptr = val;
+
+    return;
+}
+
+void rebx_set_param_string(struct rebx_extras* const rebx, struct rebx_node** apptr, const char* const param_name, const char* const val){
+    struct rebx_param* param = rebx_get_or_add_param(rebx, apptr, param_name);
+    if (param == NULL){
+        return;
+    }
+    if (param->value == NULL){ // new parameter, allocate
+        param->value = rebx_malloc(rebx, sizeof(char*));
+    }
+    // Update new or existing param value
+    const char** valptr = param->value;
+    // Let REBOUND do the memory management of strings.
+    *valptr = reb_simulation_register_name(rebx->sim, val);
 
     return;
 }
@@ -812,7 +834,7 @@ static int rebx_remove_step_node(struct rebx_node** head, struct rebx_operator* 
 int rebx_remove_operator(struct rebx_extras* rebx, struct rebx_operator* operator){
     int allocated = rebx_remove_node(&rebx->allocated_operators, operator);
     if(allocated){
-        rebx_free_operator(operator);
+        rebx_free_operator(rebx, operator);
 
     }
 
@@ -874,6 +896,7 @@ void rebx_free_ap(struct rebx_node** ap){
         free(current);
         current = next;
     }
+    *ap = NULL; // so this is safe to call twice, and particles are left with a clean ap list
 }
 
 void rebx_free_particle_ap(struct reb_particle* p){
@@ -881,9 +904,8 @@ void rebx_free_particle_ap(struct reb_particle* p){
 }
 
 void rebx_free_force(struct rebx_extras* rebx, struct rebx_force* force){
-    void (*free_arrays)(struct rebx_extras* rebx, struct rebx_force* force) = rebx_get_param(rebx, force->ap, "free_arrays");
-    if (free_arrays){
-        free_arrays(rebx, force);
+    if (force->free_memory){
+        force->free_memory(rebx, force);
     }
     if(force->name){
         free(force->name);
@@ -892,7 +914,10 @@ void rebx_free_force(struct rebx_extras* rebx, struct rebx_force* force){
     free(force);
 }
 
-void rebx_free_operator(struct rebx_operator* operator){
+void rebx_free_operator(struct rebx_extras* rebx, struct rebx_operator* operator){
+    if (operator->free_memory){
+        operator->free_memory(rebx, operator);
+    }
     if(operator->name){
         free(operator->name);
     }
@@ -911,11 +936,43 @@ void rebx_free_reg_param(struct rebx_param* param){
     free(param);
 }
 
+void rebx_detach(struct rebx_extras* rebx){
+    struct reb_simulation* sim = rebx->sim;
+    if (sim == NULL){ // sim already freed, nothing to do
+        return;
+    }
+
+    if (sim->extras == rebx){
+        if (sim->additional_forces == rebx_additional_forces){
+            sim->additional_forces = NULL;
+        }
+        if (sim->pre_timestep_modifications == rebx_pre_timestep_modifications){
+            sim->pre_timestep_modifications = NULL;
+        }
+        if (sim->post_timestep_modifications == rebx_post_timestep_modifications){
+            sim->post_timestep_modifications = NULL;
+        }
+        if (sim->extras_cleanup == rebx_extras_cleanup){
+            sim->extras_cleanup = NULL;
+        }
+        if (sim->free_particle_ap == rebx_free_particle_ap){
+            sim->free_particle_ap = NULL;
+        }
+        sim->extras = NULL;
+    }
+}
+
 void rebx_free_pointers(struct rebx_extras* rebx){
     if (rebx == NULL){
         return;
     }
-    rebx_detach(rebx->sim, rebx);
+    // if sim has already been freed, so have ap linked lists (this is always the order in Python)
+    // if not, then the user has freed rebx first, so we should free particles ap
+    if (rebx->sim != NULL){ 
+        for (size_t i=0; i<rebx->sim->N; i++){
+            rebx_free_particle_ap(&rebx->sim->particles[i]);
+        }
+    }
     struct rebx_node* current;
     struct rebx_node* next;
 
@@ -930,7 +987,7 @@ void rebx_free_pointers(struct rebx_extras* rebx){
     current = rebx->allocated_operators;
     while (current != NULL){
         next = current->next;
-        rebx_free_operator(current->object);
+        rebx_free_operator(rebx, current->object);
         free(current);
         current = next;
     }
@@ -941,7 +998,6 @@ void rebx_free_pointers(struct rebx_extras* rebx){
         free(current);
         current = next;
     }
-
 
     current = rebx->pre_timestep_modifications;
     while (current != NULL){
@@ -987,11 +1043,11 @@ void rebx_additional_forces(struct reb_simulation* sim){
     struct rebx_extras* rebx = sim->extras;
     struct rebx_node* current = rebx->additional_forces;
     while(current != NULL){
-        if(sim->force_is_velocity_dependent && sim->integrator==REB_INTEGRATOR_WHFAST){
-            reb_simulation_warning(sim, "REBOUNDx: Passing a velocity-dependent force to WHFAST. Need to apply as an operator. See REBOUNDx paper sec 5.1.");
+        if(sim->force_is_velocity_dependent && strcmp(sim->integrator.name, "whfast")==0){
+            reb_simulation_warning(sim, "REBOUNDx: Passing a velocity-dependent force to WHFAST, will accumulate errors proportional to the force. If forces get big, consider using IAS15 or applying force as an operator. See REBOUNDx paper sec 5.1 and ipython_examples/IntegrateForce.ipynb.");
         }
         struct rebx_force* force = current->object;
-        const double N = sim->N - sim->N_var;
+        const double N = sim->N;
         force->update_accelerations(sim, force, sim->particles, N);
         current = current->next;
     }
@@ -1008,8 +1064,11 @@ void rebx_pre_timestep_modifications(struct reb_simulation* sim){
     while(current != NULL){
         struct rebx_step* step = current->object;
         struct rebx_operator* operator = step->operator;
-        if(sim->integrator==REB_INTEGRATOR_IAS15 && sim->ri_ias15.epsilon != 0 && operator->operator_type == REBX_OPERATOR_UPDATER){
-            reb_simulation_warning(sim, "REBOUNDx: Operators that affect particle trajectories with adaptive timesteps can give spurious results. Use sim.ri_ias15.epsilon=0 for fixed timestep with IAS, or use a different integrator.");
+        if(strcmp(sim->integrator.name, "ias15")==0 && operator->operator_type == REBX_OPERATOR_UPDATER){
+            struct reb_integrator_ias15_state* ias15 = sim->integrator.state;
+            if (ias15->epsilon != 0){
+                reb_simulation_warning(sim, "REBOUNDx: Operators that affect particle trajectories with adaptive timesteps can give spurious results. Use sim.ri_ias15.epsilon=0 for fixed timestep with IAS, or use a different integrator.");
+            }
         }
         operator->step_function(sim, operator, dt*step->dt_fraction);
         current = current->next;
@@ -1022,13 +1081,16 @@ void rebx_post_timestep_modifications(struct reb_simulation* sim){
     }
     struct rebx_extras* rebx = sim->extras;
     struct rebx_node* current = rebx->post_timestep_modifications;
-    const double dt = sim->dt;
+    const double dt = sim->dt_last_done;
 
     while(current != NULL){
         struct rebx_step* step = current->object;
         struct rebx_operator* operator = step->operator;
-        if(sim->integrator==REB_INTEGRATOR_IAS15 && sim->ri_ias15.epsilon != 0 && operator->operator_type == REBX_OPERATOR_UPDATER){
-            reb_simulation_warning(sim, "REBOUNDx: Operators that affect particle trajectories with adaptive timesteps can give spurious results. Use sim.ri_ias15.epsilon=0 for fixed timestep with IAS, or use a different integrator.");
+        if(strcmp(sim->integrator.name, "ias15")==0 && operator->operator_type == REBX_OPERATOR_UPDATER){
+            struct reb_integrator_ias15_state* ias15 = sim->integrator.state;
+            if (ias15->epsilon != 0){
+                reb_simulation_warning(sim, "REBOUNDx: Operators that affect particle trajectories with adaptive timesteps can give spurious results. Use sim.ri_ias15.epsilon=0 for fixed timestep with IAS, or use a different integrator.");
+            }
         }
         operator->step_function(sim, operator, dt*step->dt_fraction);
         current = current->next;
@@ -1107,6 +1169,10 @@ size_t rebx_sizeof(struct rebx_extras* rebx, enum rebx_param_type type){
             return sizeof(struct reb_vec3d);
         }
         case REBX_TYPE_POINTER:
+        {
+            return 0;
+        }
+        case REBX_TYPE_STRING:
         {
             return 0;
         }

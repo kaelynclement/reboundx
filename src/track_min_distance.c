@@ -45,13 +45,13 @@
  * Only particles with their ``min_distance`` parameter set initially will track their minimum distance. The effect will
  * update this parameter when the particle gets closer than the value of ``min_distance``, so the user has to set it
  * initially.  By default, distance is measured from sim->particles[0], but you can specify a different particle by setting
- * the ``min_distance_from`` parameter to the hash of the target particle.
+ * the ``min_distance_from`` parameter to the name of the target particle.
  * 
  * ================================ =========== =======================================================
  * Name (C type)                    Required    Description
  * ================================ =========== =======================================================
  * min_distance (double)            Yes         Particle's mininimum distance.
- * min_distance_from (uint32)       No          Hash for particle from which to measure distance
+ * min_distance_from (char*)        No          Name for particle from which to measure distance
  * min_distance_orbit (reb_orbit)   No          Parameter to store orbital elements at moment corresponding to min_distance (heliocentric)
  * ================================ =========== =======================================================
  *
@@ -65,29 +65,32 @@
 
 void rebx_track_min_distance(struct reb_simulation* const sim, struct rebx_operator* const operator, const double dt){
     struct rebx_extras* const rebx = sim->extras;
-    const int N = sim->N - sim->N_var;
+    const int N = sim->N;
     for(int i=0; i<N; i++){
         struct reb_particle* const p = &sim->particles[i];
         double* min_distance = rebx_get_param(rebx, p->ap, "min_distance");
         if (min_distance != NULL){
-            const uint32_t* const target = rebx_get_param(rebx, p->ap, "min_distance_from");
+            const char** const target = rebx_get_param(rebx, p->ap, "min_distance_from");
             struct reb_particle* source;
             if (target == NULL){
                 source = &sim->particles[0];
+            }else{
+                source = reb_simulation_get_particle_by_name(sim, *target);
             }
-            else{
-                source = reb_simulation_particle_by_hash(sim, *target);
-            }
-            const double dx = p->x-source->x;
-            const double dy = p->y-source->y;
-            const double dz = p->z-source->z;
-            const double r2 = dx*dx + dy*dy + dz*dz;
-            if (r2 < *min_distance*(*min_distance)){
-                *min_distance = sqrt(r2);
-                struct reb_orbit* const orbit = rebx_get_param(rebx, p->ap, "min_distance_orbit");
-                if (orbit != NULL){
-                    *orbit = reb_orbit_from_particle(sim->G, *p, *source);
+            if (source){
+                const double dx = p->x-source->x;
+                const double dy = p->y-source->y;
+                const double dz = p->z-source->z;
+                const double r2 = dx*dx + dy*dy + dz*dz;
+                if (r2 < *min_distance*(*min_distance)){
+                    *min_distance = sqrt(r2);
+                    struct reb_orbit* const orbit = rebx_get_param(rebx, p->ap, "min_distance_orbit");
+                    if (orbit != NULL){
+                        *orbit = reb_orbit_from_particle(sim->G, *p, *source);
+                    }
                 }
+            }else{
+                reb_simulation_warning(sim, "min_distance_from cannot find particle");
             }
         }
     }

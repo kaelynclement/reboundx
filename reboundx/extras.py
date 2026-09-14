@@ -63,10 +63,7 @@ class Extras(Structure):
     def __del__(self):
         if self._b_needsfree_ == 1:
             clibreboundx.rebx_free_pointers(byref(self))
-
-    def detach(self, sim):
-        sim._extras_ref = None # remove reference to rebx so it can be garbage collected
-        clibreboundx.rebx_detach(byref(sim), byref(self))
+            clibreboundx.rebx_detach(byref(self))
 
     #######################################
     # Functions for manipulating REBOUNDx effects
@@ -317,12 +314,14 @@ class Force(Structure):
         return params
 
 FORCEFUNCPTR = CFUNCTYPE(None, POINTER(rebound.Simulation), POINTER(Force), POINTER(rebound.Particle), c_int)
+FREEFUNCPTR = CFUNCTYPE(None, POINTER(Extras), POINTER(Force))
 
 Force._fields_ = [  ("name", c_char_p),
                     ("ap", POINTER(Node)),
                     ("_sim", POINTER(rebound.Simulation)),
                     ("_force_type", c_int),
-                    ("_update_accelerations", FORCEFUNCPTR)]
+                    ("_update_accelerations", FORCEFUNCPTR),
+                    ("_free_memory", FREEFUNCPTR)]
 
 # Need to put fields after class definition because of self-referencing
 Extras._fields_ =  [("_sim", POINTER(rebound.Simulation)),
@@ -374,7 +373,7 @@ Interpolator._fields_ = [  ("interpolation", c_int),
 INTERPOLATION_TYPE = {"none":0, "spline":1}
 
 # This list keeps pairing from C rebx_param_type enum to ctypes type 1-to-1. Derive the required mappings from it
-REBX_C_TO_CTYPES = [["REBX_TYPE_NONE", None], ["REBX_TYPE_DOUBLE", c_double], ["REBX_TYPE_INT",c_int], ["REBX_TYPE_POINTER", c_void_p], ["REBX_TYPE_FORCE", Force], ["REBX_TYPE_UNIT32", c_uint32], ["REBX_TYPE_ORBIT", rebound.Orbit], ["REBX_TYPE_ODE", rebound.ODE], ["REBX_TYPE_VEC3D", rebound.Vec3d]]
+REBX_C_TO_CTYPES = [["REBX_TYPE_NONE", None], ["REBX_TYPE_DOUBLE", c_double], ["REBX_TYPE_INT",c_int], ["REBX_TYPE_POINTER", c_void_p], ["REBX_TYPE_FORCE", Force], ["REBX_TYPE_UNIT32", c_uint32], ["REBX_TYPE_ORBIT", rebound.Orbit], ["REBX_TYPE_ODE", rebound.ODE], ["REBX_TYPE_VEC3D", rebound.Vec3d], ["REBX_TYPE_STRING", POINTER(c_char_p)]]
 REBX_CTYPES = {} # maps int value of rebx_param_type enum to ctypes type
 REBX_C_PARAM_TYPES = {} # maps string of rebx_param_type enum to int
 for i, pair in enumerate(REBX_C_TO_CTYPES):
